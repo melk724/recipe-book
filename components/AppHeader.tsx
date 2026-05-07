@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { ShoppingCart, Plus, Heart, LogOut } from 'lucide-react';
+import { ShoppingCart, Plus, Heart, LogOut, Settings } from 'lucide-react';
 
 export function AppHeader({ onAddRecipe }: { onAddRecipe?: () => void }) {
   const [user, setUser] = useState<any>(null);
@@ -11,14 +11,29 @@ export function AppHeader({ onAddRecipe }: { onAddRecipe?: () => void }) {
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setUser(data.user));
+    function loadUser() {
+      supabase.auth.getUser().then(({ data }) => setUser(data.user));
+    }
+    loadUser();
+
+    // Re-fetch user when auth state changes (e.g. after updating display name)
+    const { data: sub } = supabase.auth.onAuthStateChange(() => loadUser());
+
+    // Also re-fetch when the page regains focus (e.g. coming back from Settings)
+    function onFocus() { loadUser(); }
+    window.addEventListener('focus', onFocus);
+
     function onClickOutside(e: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setMenuOpen(false);
       }
     }
     document.addEventListener('mousedown', onClickOutside);
-    return () => document.removeEventListener('mousedown', onClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', onClickOutside);
+      window.removeEventListener('focus', onFocus);
+      sub.subscription.unsubscribe();
+    };
   }, []);
 
   const initial = user?.email?.[0]?.toUpperCase() || '?';
@@ -74,7 +89,14 @@ export function AppHeader({ onAddRecipe }: { onAddRecipe?: () => void }) {
                     <div className="text-xs font-medium">{displayName}</div>
                     <div className="text-[11px] text-ink-tertiary truncate">{user.email}</div>
                   </div>
-                  <form action="/api/auth/signout" method="POST">
+                  <Link
+                    href="/settings"
+                    onClick={() => setMenuOpen(false)}
+                    className="w-full text-left px-3 py-2.5 text-sm hover:bg-ink/5 flex items-center gap-2"
+                  >
+                    <Settings size={14} /> Settings
+                  </Link>
+                  <form action="/api/auth/signout" method="POST" className="border-t border-ink/10">
                     <button
                       type="submit"
                       className="w-full text-left px-3 py-2.5 text-sm hover:bg-ink/5 flex items-center gap-2"

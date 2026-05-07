@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { Ingredient, formatAmount } from '@/lib/recipe-utils';
 import { MusicBar } from './MusicBar';
+import { CookCompleteModal } from './CookCompleteModal';
 import { ChevronLeft, ChevronRight, Play, Pause, RotateCcw } from 'lucide-react';
 
 export function CookMode({
@@ -15,6 +16,7 @@ export function CookMode({
   servings: number;
 }) {
   const [stepIdx, setStepIdx] = useState(0);
+  const [showComplete, setShowComplete] = useState(false);
 
   // Wake lock — keep screen on while cooking
   useEffect(() => {
@@ -144,9 +146,14 @@ export function CookMode({
                   <ChevronLeft size={16} /> Back
                 </button>
                 <button
-                  onClick={() => setStepIdx(Math.min(steps.length - 1, stepIdx + 1))}
-                  disabled={stepIdx === steps.length - 1}
-                  className="flex-1 px-5 py-3 rounded-lg bg-ink text-cream text-sm font-medium flex items-center justify-center gap-1 disabled:opacity-50 hover:bg-ink-soft"
+                  onClick={() => {
+                    if (stepIdx === steps.length - 1) {
+                      setShowComplete(true);
+                    } else {
+                      setStepIdx(stepIdx + 1);
+                    }
+                  }}
+                  className="flex-1 px-5 py-3 rounded-lg bg-ink text-cream text-sm font-medium flex items-center justify-center gap-1 hover:bg-ink-soft"
                 >
                   {stepIdx === steps.length - 1 ? '🎉 Done!' : <>Next <ChevronRight size={16} /></>}
                 </button>
@@ -162,6 +169,14 @@ export function CookMode({
           )}
         </div>
       </div>
+
+      {showComplete && (
+        <CookCompleteModal
+          recipeId={recipe.id}
+          recipeTitle={recipe.title}
+          onClose={() => setShowComplete(false)}
+        />
+      )}
     </div>
   );
 }

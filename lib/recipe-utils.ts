@@ -114,3 +114,98 @@ export function buildShoppingList(
     return a.name.localeCompare(b.name);
   });
 }
+
+/**
+ * Round an ingredient amount UP to a friendly shopping-list quantity.
+ * The idea: when buying ingredients, overshooting is fine — you just
+ * end up with a little extra in the pantry. So always round up, but to
+ * sensible increments based on the unit.
+ *
+ * Examples:
+ *  - 1.5 onions (no unit) -> 2
+ *  - 0.25 onion           -> 1
+ *  - 1.3 tbsp             -> 2 tbsp
+ *  - 1.6 cup              -> 2 cup
+ *  - 0.4 cup              -> 0.5 cup
+ *  - 1.7 lb               -> 2 lb
+ *  - 130 g                -> 150 g
+ *  - 0.6 l                -> 1 l
+ */
+export function roundUpForShopping(amount: number | null, unit: string | null | undefined): number | null {
+  if (amount === null || amount === undefined) return null;
+  if (amount <= 0) return amount;
+
+  const u = (unit || '').trim().toLowerCase();
+
+  // No unit = countable whole items (onions, eggs, garlic cloves) → round up to whole
+  if (!u) {
+    return Math.ceil(amount);
+  }
+
+  // Round up to the nearest "step" based on unit
+  const step = friendlyStep(u);
+  return Math.ceil(amount / step) * step;
+}
+
+function friendlyStep(unit: string): number {
+  switch (unit) {
+    // Small volumes - round up to whole
+    case 'tsp':
+    case 'teaspoon':
+    case 'teaspoons':
+    case 'tbsp':
+    case 'tablespoon':
+    case 'tablespoons':
+    case 'pinch':
+      return 1;
+
+    // Cups - round to nearest half
+    case 'cup':
+    case 'cups':
+      return 0.5;
+
+    // Ounces / fluid ounces - whole
+    case 'oz':
+    case 'ounce':
+    case 'ounces':
+    case 'fl oz':
+    case 'fl_oz':
+    case 'fluid ounce':
+    case 'fluid ounces':
+      return 1;
+
+    // Pounds / kilograms - half-pound increments
+    case 'lb':
+    case 'lbs':
+    case 'pound':
+    case 'pounds':
+    case 'kg':
+    case 'kilogram':
+    case 'kilograms':
+      return 0.5;
+
+    // Grams - 50g increments
+    case 'g':
+    case 'gram':
+    case 'grams':
+      return 50;
+
+    // Milliliters - 100ml increments
+    case 'ml':
+    case 'milliliter':
+    case 'milliliters':
+      return 100;
+
+    // Liters - half-liter increments
+    case 'l':
+    case 'liter':
+    case 'liters':
+    case 'litre':
+    case 'litres':
+      return 0.5;
+
+    // Unknown unit - leave it as-is
+    default:
+      return 0.01; // minimal step = no real rounding (just 2-decimal precision)
+  }
+}

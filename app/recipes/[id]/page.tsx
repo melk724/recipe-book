@@ -8,7 +8,7 @@ import { FavoriteHeart } from '@/components/FavoriteHeart';
 import { RecipeNotesPhotos } from '@/components/RecipeNotesPhotos';
 import { CookMode } from '@/components/CookMode';
 import { categoryGradient, getCategoryMeta, TAG_LABELS } from '@/lib/categories';
-import { formatAmount, Ingredient } from '@/lib/recipe-utils';
+import { formatAmount, Ingredient, roundUpForShopping } from '@/lib/recipe-utils';
 import { ArrowLeft, Minus, Plus, ShoppingCart, ChevronRight, MoreVertical, Trash2, Printer } from 'lucide-react';
 import { DeleteRecipeModal } from '@/components/DeleteRecipeModal';
 
@@ -82,7 +82,7 @@ export default function RecipeDetailPage() {
   async function addToShoppingList() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-    // RLS now restricts visibility to the user's own list; just grab the most recent.
+    // Get or create the user's shopping list
     let { data: list } = await supabase
       .from('shopping_lists')
       .select('*')
@@ -98,18 +98,77 @@ export default function RecipeDetailPage() {
       list = newList;
     }
     if (!list) return;
-    await supabase.from('shopping_list_items').insert(
-      scaledIngredients.map((i) => ({
-        list_id: list!.id,
-        recipe_id: recipe.id,
-        ingredient_name: i.name,
-        amount: i.amount,
-        unit: i.unit,
-        category: i.category || 'other',
-        servings_multiplier: servings / (recipe.base_servings || 1),
-      }))
-    );
-    alert(`Added ${scaledIngredients.length} ingredients to your shopping list.`);
+
+    // Fetch existing items so we can merge by name+unit
+    const { data: existing } = await supabase
+      .from('shopping_list_items')
+      .select('*')
+      .eq('list_id', list.id);
+    const existingMap = new Map<string, any>();
+    for (const it of existing || []) {
+      const key = makeMergeKey(it.ingredient_name, it.unit);
+      existingMap.set(key, it);
+    }
+
+    let mergedCount = 0;
+    let addedCount = 0;
+    const toUpdate: { id: string; amount: number | null }[] = [];
+    const toInsert: any[] = [];
+
+    for (const i of scaledIngredients) {
+      const key = makeMergeKey(i.name, i.unit);
+      const match = existingMap.get(key);
+      if (match) {
+        // Sum amounts (treating null as 0 for arithmetic, but keep null if both null)
+        const a = typeof match.amount === 'number' ? match.amount : null;
+        const b = typeof i.amount === 'number' ? i.amount : null;
+        let combined: number | null;
+        if (a === null && b === null) combined = null;
+        else combined = (a || 0) + (b || 0);
+        // Round up to a friendly shopping quantity (works for whole items AND measured)
+        combined = roundUpForShopping(combined, i.unit);
+        toUpdate.push({ id: match.id, amount: combined });
+        mergedCount++;
+      } else {
+        // New item — also round up to friendly quantity
+        const amt = roundUpForShopping(typeof i.amount === 'number' ? i.amount : null, i.unit);
+        toInsert.push({
+          list_id: list!.id,
+          recipe_id: recipe.id,
+          ingredient_name: i.name,
+          amount: amt,
+          unit: i.unit,
+          category: i.category || 'other',
+          servings_multiplier: servings / (recipe.base_servings || 1),
+        });
+        addedCount++;
+      }
+    }
+
+    // Apply updates and inserts
+    for (const u of toUpdate) {
+      // After merging from a different recipe, clear recipe_id so the item isn't
+      // accidentally deleted if either source recipe is deleted.
+      await supabase.from('shopping_list_items')
+        .update({ amount: u.amount, recipe_id: null })
+        .eq('id', u.id);
+    }
+    if (toInsert.length) {
+      await supabase.from('shopping_list_items').insert(toInsert);
+    }
+
+    if (mergedCount && addedCount) {
+      alert(`Added ${addedCount} new and combined ${mergedCount} existing items in your shopping list.`);
+    } else if (mergedCount) {
+      alert(`Combined ${mergedCount} ${mergedCount === 1 ? 'item' : 'items'} with what's already in your shopping list.`);
+    } else {
+      alert(`Added ${addedCount} ingredients to your shopping list.`);
+    }
+  }
+
+  // Build a normalized key so "Yellow Onion" + null unit matches "yellow onion" + null unit
+  function makeMergeKey(name: string, unit: string | null | undefined): string {
+    return `${name.trim().toLowerCase()}|${(unit || '').trim().toLowerCase()}`;
   }
 
   if (!recipe) {
