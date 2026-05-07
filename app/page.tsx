@@ -25,12 +25,41 @@ export default function HomePage() {
   const [activeFilter, setActiveFilter] = useState<string>('all');
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<'all' | 'favorites' | 'recent'>('all');
+  const [spotifyToast, setSpotifyToast] = useState<{ kind: 'success' | 'error'; msg: string } | null>(null);
 
   useEffect(() => {
     loadRecipes();
     // Read URL query param for ?filter=favorites
     const params = new URLSearchParams(window.location.search);
     if (params.get('filter') === 'favorites') setActiveView('favorites');
+
+    // Reload when the page becomes visible again (e.g. user came back from a detail page)
+    function onVisible() {
+      if (document.visibilityState === 'visible') loadRecipes();
+    }
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', loadRecipes);
+
+    // Spotify OAuth result
+    const sp = params.get('spotify');
+    if (sp === 'connected') {
+      setSpotifyToast({ kind: 'success', msg: 'Spotify Premium connected. Open any recipe and start cooking!' });
+      window.history.replaceState({}, '', '/');
+      setTimeout(() => setSpotifyToast(null), 5000);
+    } else if (sp === 'error') {
+      const reason = params.get('reason') || 'unknown';
+      const msg = reason === 'not_premium'
+        ? 'Spotify connected, but you need Spotify Premium for in-app playback.'
+        : `Spotify connection failed: ${reason}`;
+      setSpotifyToast({ kind: 'error', msg });
+      window.history.replaceState({}, '', '/');
+      setTimeout(() => setSpotifyToast(null), 6000);
+    }
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', loadRecipes);
+    };
   }, []);
 
   async function loadRecipes() {
@@ -40,6 +69,12 @@ export default function HomePage() {
       .order('created_at', { ascending: false });
     setRecipes(data || []);
     setLoading(false);
+  }
+
+  // Optimistic local update when a card's heart is toggled.
+  // The supabase write itself happens inside FavoriteHeart.
+  function handleFavoriteToggle(recipeId: string, next: boolean) {
+    setRecipes((prev) => prev.map((r) => r.id === recipeId ? { ...r, is_favorite: next } : r));
   }
 
   // Filter pipeline
@@ -87,6 +122,14 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-cream">
       <AppHeader onAddRecipe={() => setImportOpen(true)} />
+
+      {spotifyToast && (
+        <div className={`fixed top-20 left-1/2 -translate-x-1/2 z-30 px-4 py-3 rounded-lg shadow-lg max-w-md text-sm ${
+          spotifyToast.kind === 'success' ? 'bg-sage text-white' : 'bg-terracotta text-cream'
+        }`}>
+          {spotifyToast.msg}
+        </div>
+      )}
 
       {loading ? (
         <div className="max-w-6xl mx-auto px-6 py-20 text-center text-ink-muted">Loading…</div>
@@ -169,7 +212,7 @@ export default function HomePage() {
 
             {/* Favorites shelf — only on All view, when there are some */}
             {activeView === 'all' && !activeCategory && favorites.length > 0 && (
-              <FavoritesShelf favorites={favorites} />
+              <FavoritesShelf favorites={favorites} onFavoriteChange={handleFavoriteToggle} />
             )}
 
             {/* Filter chips */}
@@ -207,7 +250,7 @@ export default function HomePage() {
                         </span>
                       </div>
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                        {items.map((r) => <RecipeCard key={r.id} recipe={r} compact />)}
+                        {items.map((r) => <RecipeCard key={r.id} recipe={r} compact onFavoriteChange={handleFavoriteToggle} />)}
                       </div>
                     </section>
                   );
@@ -215,7 +258,7 @@ export default function HomePage() {
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {filteredRecipes.map((r) => <RecipeCard key={r.id} recipe={r} compact />)}
+                {filteredRecipes.map((r) => <RecipeCard key={r.id} recipe={r} compact onFavoriteChange={handleFavoriteToggle} />)}
               </div>
             )}
           </div>
@@ -258,7 +301,7 @@ function SideItem({
   );
 }
 
-function FavoritesShelf({ favorites }: { favorites: RecipeCardData[] }) {
+function FavoritesShelf({ favorites, onFavoriteChange }: { favorites: RecipeCardData[]; onFavoriteChange?: (recipeId: string, next: boolean) => void }) {
   return (
     <div className="mb-7 p-4 sm:p-5 rounded-xl bg-gradient-to-b from-terracotta/5 to-transparent border border-terracotta/15">
       <div className="flex items-baseline justify-between mb-3">
@@ -273,7 +316,7 @@ function FavoritesShelf({ favorites }: { favorites: RecipeCardData[] }) {
       <div className="flex gap-2.5 overflow-x-auto no-scrollbar -mx-1 px-1 pb-1">
         {favorites.slice(0, 12).map((r) => (
           <div key={r.id} className="flex-none w-[110px]">
-            <RecipeCard recipe={r} compact />
+            <RecipeCard recipe={r} compact onFavoriteChange={onFavoriteChange} />
           </div>
         ))}
       </div>

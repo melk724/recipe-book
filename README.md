@@ -132,4 +132,3 @@ A few things deliberately left for v2:
 - Scheduling/meal-planning calendar view
 - Auto-suggest favorite based on cook log ratings
 - Spotify OAuth for full playback control (currently search-only)
-# recipe-book

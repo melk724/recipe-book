@@ -28,11 +28,12 @@ export default function ShoppingListPage() {
   useEffect(() => { load(); }, []);
 
   async function load() {
-    const { data: { user } } = await supabase.auth.getUser();
+    // Single-user mode: just grab the most recent shopping list.
+    // (When auth is added, filter by user_id here.)
     let { data: l } = await supabase
       .from('shopping_lists')
       .select('*')
-      .eq('user_id', user?.id || '00000000-0000-0000-0000-000000000000')
+      .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
     setList(l);

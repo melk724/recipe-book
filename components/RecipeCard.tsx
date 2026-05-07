@@ -18,7 +18,7 @@ export interface RecipeCardData {
   is_favorite?: boolean;
 }
 
-export function RecipeCard({ recipe, compact = false }: { recipe: RecipeCardData; compact?: boolean }) {
+export function RecipeCard({ recipe, compact = false, onFavoriteChange }: { recipe: RecipeCardData; compact?: boolean; onFavoriteChange?: (recipeId: string, next: boolean) => void }) {
   const meta = getCategoryMeta(recipe.category);
   const totalTime = (recipe.prep_time_minutes || 0) + (recipe.cook_time_minutes || 0);
   const tags = (recipe.tags || []).slice(0, 2);
@@ -38,7 +38,12 @@ export function RecipeCard({ recipe, compact = false }: { recipe: RecipeCardData
         {recipe.image_url && (
           <img src={recipe.image_url} alt={recipe.title} className="w-full h-full object-cover" />
         )}
-        <FavoriteHeart recipeId={recipe.id} initial={!!recipe.is_favorite} size={compact ? 26 : 32} />
+        <FavoriteHeart
+          recipeId={recipe.id}
+          initial={!!recipe.is_favorite}
+          size={compact ? 26 : 32}
+          onChange={onFavoriteChange ? (next) => onFavoriteChange(recipe.id, next) : undefined}
+        />
       </div>
       <div className={`flex-1 ${compact ? 'p-2.5' : 'p-3.5'}`}>
         <h3 className={`font-medium ${compact ? 'text-sm' : 'text-[15px]'} leading-tight mb-1`}>

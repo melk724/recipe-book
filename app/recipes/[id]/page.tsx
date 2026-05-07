@@ -9,7 +9,8 @@ import { RecipeNotesPhotos } from '@/components/RecipeNotesPhotos';
 import { CookMode } from '@/components/CookMode';
 import { categoryGradient, getCategoryMeta, TAG_LABELS } from '@/lib/categories';
 import { formatAmount, Ingredient } from '@/lib/recipe-utils';
-import { ArrowLeft, Minus, Plus, ShoppingCart, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Minus, Plus, ShoppingCart, ChevronRight, MoreVertical, Trash2, Printer } from 'lucide-react';
+import { DeleteRecipeModal } from '@/components/DeleteRecipeModal';
 
 type Tab = 'recipe' | 'notes' | 'cook';
 
@@ -25,8 +26,20 @@ export default function RecipeDetailPage() {
   const [hero, setHero] = useState<string | null>(null);
   const [pinnedNotes, setPinnedNotes] = useState<any[]>([]);
   const [stepNotes, setStepNotes] = useState<Record<number, any>>({});
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [showDelete, setShowDelete] = useState(false);
 
   useEffect(() => { load(); }, [id]);
+
+  // Close menu on outside click
+  useEffect(() => {
+    function onClick(e: MouseEvent) {
+      const target = e.target as HTMLElement;
+      if (!target.closest?.('[data-recipe-menu]')) setMenuOpen(false);
+    }
+    if (menuOpen) document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, [menuOpen]);
 
   async function load() {
     const [rRes, iRes, sRes, pRes, nRes] = await Promise.all([
@@ -68,16 +81,18 @@ export default function RecipeDetailPage() {
 
   async function addToShoppingList() {
     const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    // RLS now restricts visibility to the user's own list; just grab the most recent.
     let { data: list } = await supabase
       .from('shopping_lists')
       .select('*')
-      .eq('user_id', user?.id || '00000000-0000-0000-0000-000000000000')
+      .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
     if (!list) {
       const { data: newList } = await supabase
         .from('shopping_lists')
-        .insert({ user_id: user?.id, name: 'My Shopping List' })
+        .insert({ user_id: user.id, name: 'My Shopping List' })
         .select()
         .single();
       list = newList;
@@ -113,15 +128,47 @@ export default function RecipeDetailPage() {
     <div className="min-h-screen bg-cream">
       <AppHeader />
       <main className="max-w-4xl mx-auto px-4 sm:px-6 py-6">
-        <button
-          onClick={() => router.push('/')}
-          className="text-sm text-ink-muted hover:text-ink flex items-center gap-1 mb-4"
-        >
-          <ArrowLeft size={14} /> All recipes
-        </button>
+        <div className="flex items-center justify-between mb-4 no-print">
+          <button
+            onClick={() => router.push('/')}
+            className="text-sm text-ink-muted hover:text-ink flex items-center gap-1"
+          >
+            <ArrowLeft size={14} /> All recipes
+          </button>
+          <div className="relative" data-recipe-menu>
+            <button
+              onClick={() => setMenuOpen((v) => !v)}
+              aria-label="Recipe options"
+              className="w-9 h-9 rounded-full hover:bg-ink/5 flex items-center justify-center text-ink-muted"
+            >
+              <MoreVertical size={18} />
+            </button>
+            {menuOpen && (
+              <div className="absolute right-0 top-full mt-1 bg-cream-card border border-ink/10 rounded-lg shadow-lg overflow-hidden min-w-[180px] z-30">
+                <button
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setTab('recipe');
+                    // Wait a tick for the tab to render, then trigger print
+                    setTimeout(() => window.print(), 100);
+                  }}
+                  className="w-full text-left px-3 py-2.5 text-sm hover:bg-ink/5 flex items-center gap-2"
+                >
+                  <Printer size={14} /> Print recipe
+                </button>
+                <button
+                  onClick={() => { setMenuOpen(false); setShowDelete(true); }}
+                  className="w-full text-left px-3 py-2.5 text-sm hover:bg-terracotta/5 text-terracotta flex items-center gap-2 border-t border-ink/10"
+                >
+                  <Trash2 size={14} /> Delete recipe
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 border-b border-ink/10 mb-5">
+        <div className="flex gap-1 border-b border-ink/10 mb-5 no-print">
           <TabBtn active={tab === 'recipe'} onClick={() => setTab('recipe')}>Recipe</TabBtn>
           <TabBtn active={tab === 'notes'} onClick={() => setTab('notes')}>Notes &amp; Photos</TabBtn>
           <TabBtn active={tab === 'cook'} onClick={() => setTab('cook')}>Cook</TabBtn>
@@ -135,7 +182,9 @@ export default function RecipeDetailPage() {
               style={{ background: hero ? undefined : categoryGradient(recipe.category) }}
             >
               {hero && <img src={hero} alt={recipe.title} className="absolute inset-0 w-full h-full object-cover" />}
-              <FavoriteHeart recipeId={recipe.id} initial={!!recipe.is_favorite} />
+              <div className="no-print">
+                <FavoriteHeart recipeId={recipe.id} initial={!!recipe.is_favorite} />
+              </div>
             </div>
             {/* Body */}
             <div className="p-6">
@@ -185,11 +234,11 @@ export default function RecipeDetailPage() {
               <div className="flex items-center gap-3 px-3 py-2.5 bg-terracotta/5 rounded-lg mb-4">
                 <label className="text-xs text-ink-muted font-medium">Cooking for</label>
                 <div className="flex items-center gap-1 ml-auto">
-                  <Stepper onClick={() => setServings(Math.max(1, servings - 1))}><Minus size={12} /></Stepper>
+                  <Stepper onClick={() => setServings(Math.max(1, servings - 1))} className="no-print"><Minus size={12} /></Stepper>
                   <span className="font-editorial-italic text-lg font-medium min-w-[28px] text-center tnum">
                     {servings}
                   </span>
-                  <Stepper onClick={() => setServings(Math.min(24, servings + 1))}><Plus size={12} /></Stepper>
+                  <Stepper onClick={() => setServings(Math.min(24, servings + 1))} className="no-print"><Plus size={12} /></Stepper>
                 </div>
               </div>
 
@@ -205,8 +254,21 @@ export default function RecipeDetailPage() {
                 ))}
               </div>
 
+              {/* Print-only: steps appear inline */}
+              <div className="print-only mt-6">
+                <h3 className="font-editorial-italic text-xl mb-2">Steps</h3>
+                <ol className="space-y-2">
+                  {steps.map((s, i) => (
+                    <li key={s.id} className="flex gap-2 text-sm">
+                      <span className="font-medium text-ink tnum">{i + 1}.</span>
+                      <span>{s.instruction}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+
               {/* Actions */}
-              <div className="flex gap-2 mt-5">
+              <div className="flex gap-2 mt-5 no-print">
                 <button
                   onClick={addToShoppingList}
                   className="px-4 py-2.5 rounded-lg border border-ink/20 text-sm flex items-center gap-1.5 hover:bg-ink/5"
@@ -225,19 +287,32 @@ export default function RecipeDetailPage() {
         )}
 
         {tab === 'notes' && (
-          <RecipeNotesPhotos recipe={recipe} steps={steps} onChange={load} />
+          <div className="no-print">
+            <RecipeNotesPhotos recipe={recipe} steps={steps} onChange={load} />
+          </div>
         )}
 
         {tab === 'cook' && (
-          <CookMode
-            recipe={recipe}
-            scaledIngredients={scaledIngredients}
-            steps={steps}
-            stepNotes={stepNotes}
-            servings={servings}
-          />
+          <div className="no-print">
+            <CookMode
+              recipe={recipe}
+              scaledIngredients={scaledIngredients}
+              steps={steps}
+              stepNotes={stepNotes}
+              servings={servings}
+            />
+          </div>
         )}
       </main>
+
+      {showDelete && (
+        <DeleteRecipeModal
+          recipeId={recipe.id}
+          recipeTitle={recipe.title}
+          onClose={() => setShowDelete(false)}
+          onDeleted={() => router.push('/')}
+        />
+      )}
     </div>
   );
 }
@@ -266,11 +341,11 @@ function Stat({ num, unit, label }: { num: number; unit?: string; label: string 
   );
 }
 
-function Stepper({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+function Stepper({ onClick, children, className = '' }: { onClick: () => void; children: React.ReactNode; className?: string }) {
   return (
     <button
       onClick={onClick}
-      className="w-7 h-7 rounded-full border border-ink/20 bg-cream-card hover:border-terracotta hover:text-terracotta flex items-center justify-center"
+      className={`w-7 h-7 rounded-full border border-ink/20 bg-cream-card hover:border-terracotta hover:text-terracotta flex items-center justify-center ${className}`}
     >
       {children}
     </button>

@@ -41,7 +41,7 @@ export function RecipeNotesPhotos({
     await uploadRecipePhoto({
       file,
       recipeId: recipe.id,
-      userId: user?.id || '00000000-0000-0000-0000-000000000000',
+      userId: user!.id,
       photoType: isFirst ? 'hero' : 'session',
     });
     load();
@@ -115,7 +115,7 @@ export function RecipeNotesPhotos({
               const { data: { user } } = await supabase.auth.getUser();
               await addNote({
                 recipeId: recipe.id,
-                userId: user?.id || '00000000-0000-0000-0000-000000000000',
+                userId: user!.id,
                 noteType: 'pinned',
                 content,
               });
@@ -210,7 +210,7 @@ export function RecipeNotesPhotos({
                           const { data: { user } } = await supabase.auth.getUser();
                           await addNote({
                             recipeId: recipe.id,
-                            userId: user?.id || '00000000-0000-0000-0000-000000000000',
+                            userId: user!.id,
                             noteType: 'step',
                             stepPosition: s.position,
                             content,
@@ -359,7 +359,7 @@ function SessionNoteForm({
     const { data: { user } } = await supabase.auth.getUser();
     await addNote({
       recipeId,
-      userId: user?.id || '00000000-0000-0000-0000-000000000000',
+      userId: user!.id,
       noteType: 'session',
       content: text.trim(),
       rating: rating || undefined,

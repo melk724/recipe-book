@@ -65,10 +65,11 @@ export function ImportModal({
 
   async function saveRecipe(recipe: any, sourceType: string, sourceUrl?: string) {
     const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('You must be signed in to save recipes');
     const { data: saved, error: rErr } = await supabase
       .from('recipes')
       .insert({
-        user_id: user?.id,
+        user_id: user.id,
         title: recipe.title,
         description: recipe.description,
         source_type: sourceType,

@@ -2,17 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Ingredient, formatAmount } from '@/lib/recipe-utils';
-import { ChevronLeft, ChevronRight, Play, Pause, RotateCcw, Music, X } from 'lucide-react';
-
-const MOODS = [
-  { id: 'italian', label: 'Italian' },
-  { id: 'jazzy', label: 'Jazzy' },
-  { id: 'upbeat', label: 'Upbeat' },
-  { id: 'chill', label: 'Chill' },
-  { id: 'dinner_party', label: 'Dinner party' },
-  { id: 'focused', label: 'Focused' },
-  { id: 'energetic', label: 'Energetic' },
-];
+import { MusicBar } from './MusicBar';
+import { ChevronLeft, ChevronRight, Play, Pause, RotateCcw } from 'lucide-react';
 
 export function CookMode({
   recipe, scaledIngredients, steps, stepNotes, servings,
@@ -24,8 +15,6 @@ export function CookMode({
   servings: number;
 }) {
   const [stepIdx, setStepIdx] = useState(0);
-  const [music, setMusic] = useState<any>(null);
-  const [musicLoading, setMusicLoading] = useState(false);
   const [showIngredients, setShowIngredients] = useState(true);
 
   // Wake lock — keep screen on while cooking
@@ -38,32 +27,13 @@ export function CookMode({
     return () => { wl?.release?.(); };
   }, []);
 
-  async function pickMusic(mood: string) {
-    setMusicLoading(true);
-    try {
-      const res = await fetch('/api/spotify/recommend', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mood, recipeCuisine: recipe.cuisine }),
-      });
-      const data = await res.json();
-      setMusic(data.playlists?.[0] || null);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setMusicLoading(false);
-    }
-  }
-
   const step = steps[stepIdx];
   const tip = step ? stepNotes[step.position] : null;
 
   return (
     <div className="space-y-4">
-      {/* Music bar */}
-      <MusicBar music={music} loading={musicLoading} onPick={pickMusic} onClear={() => setMusic(null)} />
+      <MusicBar recipeCuisine={recipe.cuisine} />
 
-      {/* Ingredients (collapsible reference) */}
       <div className="bg-cream-card border border-ink/10 rounded-xl overflow-hidden">
         <button
           onClick={() => setShowIngredients((v) => !v)}
@@ -88,7 +58,6 @@ export function CookMode({
         )}
       </div>
 
-      {/* Current step */}
       {step && (
         <div className="bg-cream-card border border-ink/10 rounded-xl p-5 sm:p-6">
           <div className="flex items-center justify-between mb-4">
@@ -139,75 +108,9 @@ export function CookMode({
         </div>
       )}
 
-      {/* Upcoming steps preview */}
       {stepIdx < steps.length - 1 && (
         <div className="text-xs text-ink-tertiary px-1">
           Up next: <span className="text-ink-muted">{steps[stepIdx + 1].instruction.slice(0, 80)}{steps[stepIdx + 1].instruction.length > 80 ? '…' : ''}</span>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function MusicBar({
-  music, loading, onPick, onClear,
-}: { music: any; loading: boolean; onPick: (mood: string) => void; onClear: () => void }) {
-  const [expanded, setExpanded] = useState(false);
-
-  if (music) {
-    return (
-      <div className="bg-cream-card border border-ink/10 rounded-xl overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-ink/10">
-          <div className="flex items-center gap-2 text-sm">
-            <Music size={14} className="text-terracotta" />
-            <span className="font-medium">{music.name}</span>
-            <span className="text-[10px] uppercase tracking-wider text-ink-tertiary">
-              {music.provider}
-            </span>
-          </div>
-          <button onClick={onClear} className="text-ink-tertiary hover:text-terracotta">
-            <X size={14} />
-          </button>
-        </div>
-        {music.embedUrl && (
-          <iframe
-            src={music.embedUrl}
-            className="w-full"
-            style={{ height: music.provider === 'spotify' ? 80 : 200 }}
-            allow="autoplay; encrypted-media"
-            allowFullScreen
-          />
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <div className="bg-gradient-to-r from-terracotta/8 via-cream-card to-cream-card border border-ink/10 rounded-xl p-4">
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2 text-sm">
-          <Music size={16} className="text-terracotta" />
-          <span className="font-medium">Cooking music?</span>
-        </div>
-        <button
-          onClick={() => setExpanded((v) => !v)}
-          className="text-xs text-ink-muted hover:text-ink"
-        >
-          {expanded ? 'Hide' : 'Pick a mood'}
-        </button>
-      </div>
-      {expanded && (
-        <div className="flex flex-wrap gap-1.5 mt-3">
-          {MOODS.map((m) => (
-            <button
-              key={m.id}
-              onClick={() => onPick(m.id)}
-              disabled={loading}
-              className="text-[11px] px-2.5 py-1 rounded-full border border-ink/15 bg-cream-card hover:bg-terracotta hover:text-cream hover:border-terracotta disabled:opacity-50 transition"
-            >
-              {loading ? '…' : m.label}
-            </button>
-          ))}
         </div>
       )}
     </div>
@@ -228,7 +131,6 @@ function Timer({ seconds }: { seconds: number }) {
           clearInterval(intervalRef.current);
           setRunning(false);
           setDone(true);
-          // Soft alert sound via Web Audio
           try {
             const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
             const o = ctx.createOscillator();
