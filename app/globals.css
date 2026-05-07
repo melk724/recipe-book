@@ -169,3 +169,27 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   from { transform: scale(0.92); opacity: 0; }
   to { transform: scale(1); opacity: 1; }
 }
+
+/* Shopping list print adjustments */
+@media print {
+  /* Make checkboxes print as visible empty squares to check off in the store */
+  input[type="checkbox"] {
+    -webkit-appearance: none !important;
+    appearance: none !important;
+    width: 14px !important;
+    height: 14px !important;
+    border: 1px solid #888 !important;
+    border-radius: 2px !important;
+    background: white !important;
+    margin-right: 8px !important;
+    vertical-align: middle !important;
+  }
+  /* Already-checked items: show with strikethrough but still visible */
+  input[type="checkbox"]:checked + span,
+  label:has(input[type="checkbox"]:checked) {
+    text-decoration: line-through !important;
+    color: #999 !important;
+  }
+  /* Don't break a category section across pages if we can avoid it */
+  .shopping-category { page-break-inside: avoid; }
+}

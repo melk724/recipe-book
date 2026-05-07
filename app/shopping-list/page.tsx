@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { AppHeader } from '@/components/AppHeader';
 import { formatAmount } from '@/lib/recipe-utils';
-import { Trash2, Check } from 'lucide-react';
+import { Trash2, Check, Printer } from 'lucide-react';
 
 const CATEGORY_ORDER = ['produce', 'dairy', 'meat', 'seafood', 'pantry', 'spices', 'bakery', 'frozen', 'beverages', 'other'];
 const CATEGORY_LABELS: Record<string, string> = {
@@ -83,12 +83,25 @@ export default function ShoppingListPage() {
 
   return (
     <div className="min-h-screen bg-cream">
-      <AppHeader />
+      <div className="no-print">
+        <AppHeader />
+      </div>
       <main className="max-w-2xl mx-auto px-4 sm:px-6 py-6">
         <p className="text-[11px] uppercase tracking-[0.18em] text-terracotta font-medium mb-2">
           Shopping list
         </p>
-        <h1 className="font-editorial-italic text-3xl sm:text-4xl mb-1">This week's list</h1>
+        <div className="flex items-start justify-between gap-3 mb-1">
+          <h1 className="font-editorial-italic text-3xl sm:text-4xl">This week's list</h1>
+          {items.length > 0 && (
+            <button
+              onClick={() => window.print()}
+              className="no-print mt-2 px-3 py-1.5 rounded-full text-xs flex items-center gap-1.5 hover:bg-ink/5 text-ink-muted hover:text-ink flex-none"
+              aria-label="Print shopping list"
+            >
+              <Printer size={14} /> Print
+            </button>
+          )}
+        </div>
         <p className="text-sm text-ink-muted mb-6">
           {items.length === 0 ? 'Empty for now — add items from any recipe.' :
             `${items.length} items, ${checkedCount} checked off.`}
@@ -130,7 +143,7 @@ export default function ShoppingListPage() {
                       </span>
                       <button
                         onClick={(e) => { e.preventDefault(); removeItem(i.id); }}
-                        className="opacity-0 group-hover:opacity-100 text-ink-tertiary hover:text-terracotta"
+                        className="no-print opacity-0 group-hover:opacity-100 text-ink-tertiary hover:text-terracotta"
                       >
                         <Trash2 size={13} />
                       </button>
@@ -139,7 +152,7 @@ export default function ShoppingListPage() {
                 </div>
               ))}
             </div>
-            <div className="flex justify-end gap-3 mt-4 text-xs">
+            <div className="flex justify-end gap-3 mt-4 text-xs no-print">
               {checkedCount > 0 && (
                 <button onClick={clearChecked} className="text-ink-muted hover:text-terracotta flex items-center gap-1">
                   <Check size={12} /> Clear {checkedCount} checked
