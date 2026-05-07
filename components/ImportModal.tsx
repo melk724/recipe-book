@@ -17,21 +17,44 @@ export function ImportModal({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
-  async function handleFile(file: File, sourceType: 'image' | 'pdf' | 'camera') {
+  async function handleFiles(files: File[], sourceType: 'image' | 'pdf' | 'camera') {
+    if (!files.length) return;
     setBusy(true);
-    setBusyMsg('Reading your recipe…');
+    setBusyMsg(files.length > 1
+      ? `Reading ${files.length} pages…`
+      : 'Reading your recipe…');
     setError('');
     try {
-      const data = await fileToBase64(file);
-      const res = await fetch('/api/recipes/import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sourceType, data, mediaType: file.type }),
-      });
-      if (!res.ok) throw new Error((await res.json()).error || 'Import failed');
-      const { recipe } = await res.json();
-      setBusyMsg('Saving to your cookbook…');
-      await saveRecipe(recipe, sourceType);
+      // For multiple images, send them as an array. PDFs are always single-file.
+      if (sourceType === 'pdf' || files.length === 1) {
+        const data = await fileToBase64(files[0]);
+        const res = await fetch('/api/recipes/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sourceType, data, mediaType: files[0].type }),
+        });
+        if (!res.ok) throw new Error((await res.json()).error || 'Import failed');
+        const { recipe } = await res.json();
+        setBusyMsg('Saving to your cookbook…');
+        await saveRecipe(recipe, sourceType);
+      } else {
+        // Multi-image import
+        const images = await Promise.all(
+          files.map(async (f) => ({
+            data: await fileToBase64(f),
+            mediaType: f.type,
+          }))
+        );
+        const res = await fetch('/api/recipes/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sourceType, images }),
+        });
+        if (!res.ok) throw new Error((await res.json()).error || 'Import failed');
+        const { recipe } = await res.json();
+        setBusyMsg('Saving to your cookbook…');
+        await saveRecipe(recipe, sourceType);
+      }
       onImported();
     } catch (e: any) {
       setError(e.message);
@@ -130,12 +153,17 @@ export function ImportModal({
             </div>
 
             {!source ? (
-              <div className="grid grid-cols-2 gap-2.5">
-                <SourceButton icon={<Camera />} label="Camera" hint="Snap a cookbook page" onClick={() => cameraInputRef.current?.click()} />
-                <SourceButton icon={<ImageIcon />} label="Photo" hint="From your library" onClick={() => fileInputRef.current?.click()} />
-                <SourceButton icon={<FileText />} label="PDF" hint="Upload a document" onClick={() => fileInputRef.current?.click()} />
-                <SourceButton icon={<Link2 />} label="Web URL" hint="Any recipe site" onClick={() => setSource('url')} />
-              </div>
+              <>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <SourceButton icon={<Camera />} label="Camera" hint="Snap a single page" onClick={() => cameraInputRef.current?.click()} />
+                  <SourceButton icon={<ImageIcon />} label="Photos" hint="Pick one or several" onClick={() => fileInputRef.current?.click()} />
+                  <SourceButton icon={<FileText />} label="PDF" hint="Upload a document" onClick={() => fileInputRef.current?.click()} />
+                  <SourceButton icon={<Link2 />} label="Web URL" hint="Any recipe site" onClick={() => setSource('url')} />
+                </div>
+                <p className="mt-3 text-[11px] text-ink-tertiary leading-relaxed text-center px-1">
+                  💡 <span className="font-medium text-ink-muted">Multi-page recipe?</span> Take all the photos in your phone's regular Camera app first, then tap <span className="font-medium text-ink-muted">Photos</span> here to pick them all at once.
+                </p>
+              </>
             ) : source === 'url' ? (
               <div>
                 <input
@@ -173,17 +201,23 @@ export function ImportModal({
           accept="image/*"
           capture="environment"
           className="hidden"
-          onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0], 'camera')}
+          onChange={(e) => {
+            const files = Array.from(e.target.files || []);
+            if (files.length) handleFiles(files, 'camera');
+          }}
         />
         <input
           ref={fileInputRef}
           type="file"
           accept="image/*,application/pdf"
+          multiple
           className="hidden"
           onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (!f) return;
-            handleFile(f, f.type === 'application/pdf' ? 'pdf' : 'image');
+            const files = Array.from(e.target.files || []);
+            if (!files.length) return;
+            // PDFs are single-file. Multiple images are batched.
+            const isPdf = files[0].type === 'application/pdf';
+            handleFiles(isPdf ? [files[0]] : files, isPdf ? 'pdf' : 'image');
           }}
         />
 

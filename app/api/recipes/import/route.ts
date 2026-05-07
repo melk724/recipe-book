@@ -76,18 +76,23 @@ export async function POST(req: NextRequest) {
         },
       ];
     } else if (sourceType === 'image' || sourceType === 'camera') {
-      // data is base64-encoded image
-      content = [
-        {
-          type: 'image',
-          source: {
-            type: 'base64',
-            media_type: body.mediaType || 'image/jpeg',
-            data: data,
-          },
+      // Support both single-image (legacy: data + mediaType) and multi-image (images: [{data, mediaType}])
+      const images = body.images || (body.data ? [{ data: body.data, mediaType: body.mediaType || 'image/jpeg' }] : []);
+      if (!images.length) {
+        return NextResponse.json({ error: 'No image data provided' }, { status: 400 });
+      }
+      const imageBlocks = images.map((img: { data: string; mediaType?: string }) => ({
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: img.mediaType || 'image/jpeg',
+          data: img.data,
         },
-        { type: 'text', text: EXTRACTION_PROMPT },
-      ];
+      }));
+      const promptText = images.length > 1
+        ? `${EXTRACTION_PROMPT}\n\nIMPORTANT: These ${images.length} images are pages of the SAME recipe (e.g., a cookbook spread). Combine all the text and ingredients from every page into ONE unified recipe. Don't return multiple recipes.`
+        : EXTRACTION_PROMPT;
+      content = [...imageBlocks, { type: 'text', text: promptText }];
     } else if (sourceType === 'pdf') {
       content = [
         {
