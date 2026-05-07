@@ -33,17 +33,32 @@ export function RecipeNotesPhotos({
   const stepNotes = notes.filter((n) => n.note_type === 'step');
   const heroPhoto = photos.find((p) => p.photo_type === 'hero');
 
+  const [uploading, setUploading] = useState<{ done: number; total: number } | null>(null);
+
   async function handleGalleryUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
     const { data: { user } } = await supabase.auth.getUser();
-    const isFirst = !heroPhoto;
-    await uploadRecipePhoto({
-      file,
-      recipeId: recipe.id,
-      userId: user!.id,
-      photoType: isFirst ? 'hero' : 'session',
-    });
+    setUploading({ done: 0, total: files.length });
+    let firstWasHero = !heroPhoto;
+    for (let idx = 0; idx < files.length; idx++) {
+      const file = files[idx];
+      try {
+        await uploadRecipePhoto({
+          file,
+          recipeId: recipe.id,
+          userId: user!.id,
+          // First photo of the batch becomes hero only if no hero exists yet
+          photoType: idx === 0 && firstWasHero ? 'hero' : 'session',
+        });
+      } catch (err) {
+        console.error('Upload failed for', file.name, err);
+      }
+      setUploading({ done: idx + 1, total: files.length });
+    }
+    setUploading(null);
+    // Reset the input so user can re-pick the same files if they want
+    if (e.target) e.target.value = '';
     load();
     onChange();
   }
@@ -244,7 +259,7 @@ export function RecipeNotesPhotos({
             onClick={() => galleryFileRef.current?.click()}
             className="text-xs text-terracotta hover:text-terracotta-dark flex items-center gap-1"
           >
-            <Plus size={14} /> Add photo
+            <Plus size={14} /> Add photos
           </button>
         }
       >
@@ -252,16 +267,31 @@ export function RecipeNotesPhotos({
           ref={galleryFileRef}
           type="file"
           accept="image/*"
+          multiple
           className="hidden"
           onChange={handleGalleryUpload}
         />
+        {uploading && (
+          <div className="mb-3 p-3 bg-terracotta/5 border border-terracotta/20 rounded-lg text-sm text-ink-soft flex items-center gap-3">
+            <div className="flex-1">
+              Uploading {uploading.done} of {uploading.total} {uploading.total === 1 ? 'photo' : 'photos'}…
+              <div className="h-1 bg-ink/10 rounded-full mt-1 overflow-hidden">
+                <div
+                  className="h-full bg-terracotta transition-all"
+                  style={{ width: `${(uploading.done / uploading.total) * 100}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
         {photos.length === 0 ? (
           <button
             onClick={() => galleryFileRef.current?.click()}
             className="w-full aspect-[3/1] rounded-lg border border-dashed border-ink/25 flex flex-col items-center justify-center text-ink-tertiary hover:border-terracotta hover:text-terracotta"
           >
             <ImageIcon size={28} className="mb-2" />
-            <span className="text-sm">Add a photo of your dish</span>
+            <span className="text-sm">Add photos of your dish</span>
+            <span className="text-[11px] text-ink-tertiary mt-1">Pick one or several at once</span>
           </button>
         ) : (
           <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">

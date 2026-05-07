@@ -153,17 +153,12 @@ export function ImportModal({
             </div>
 
             {!source ? (
-              <>
-                <div className="grid grid-cols-2 gap-2.5">
-                  <SourceButton icon={<Camera />} label="Camera" hint="Snap a single page" onClick={() => cameraInputRef.current?.click()} />
-                  <SourceButton icon={<ImageIcon />} label="Photos" hint="Pick one or several" onClick={() => fileInputRef.current?.click()} />
-                  <SourceButton icon={<FileText />} label="PDF" hint="Upload a document" onClick={() => fileInputRef.current?.click()} />
-                  <SourceButton icon={<Link2 />} label="Web URL" hint="Any recipe site" onClick={() => setSource('url')} />
-                </div>
-                <p className="mt-3 text-[11px] text-ink-tertiary leading-relaxed text-center px-1">
-                  💡 <span className="font-medium text-ink-muted">Multi-page recipe?</span> Take all the photos in your phone's regular Camera app first, then tap <span className="font-medium text-ink-muted">Photos</span> here to pick them all at once.
-                </p>
-              </>
+              <div className="grid grid-cols-2 gap-2.5">
+                <SourceButton icon={<Camera />} label="Camera" hint="Snap one or more pages" onClick={() => cameraInputRef.current?.click()} />
+                <SourceButton icon={<ImageIcon />} label="Photos" hint="Pick one or several" onClick={() => fileInputRef.current?.click()} />
+                <SourceButton icon={<FileText />} label="PDF" hint="Upload a document" onClick={() => fileInputRef.current?.click()} />
+                <SourceButton icon={<Link2 />} label="Web URL" hint="Any recipe site" onClick={() => setSource('url')} />
+              </div>
             ) : source === 'url' ? (
               <div>
                 <input
