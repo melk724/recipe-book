@@ -2,12 +2,12 @@
 
 import { useState } from 'react';
 import { createClient } from '@/lib/supabase';
-import { ChefHat, Mail, Lock, Loader2 } from 'lucide-react';
+import { Mail, Lock, Loader2 } from 'lucide-react';
 
-type Mode = 'magic' | 'signin' | 'signup';
+type Mode = 'signin' | 'signup';
 
 export default function LoginPage() {
-  const [mode, setMode] = useState<Mode>('magic');
+  const [mode, setMode] = useState<Mode>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -23,26 +23,24 @@ export default function LoginPage() {
     setError('');
 
     try {
-      if (mode === 'magic') {
-        const { error } = await supabase.auth.signInWithOtp({
-          email,
-          options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
-        });
-        if (error) throw error;
-        setMessage(`Check your email — we sent a sign-in link to ${email}.`);
-      } else if (mode === 'signin') {
+      if (mode === 'signin') {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
         const params = new URLSearchParams(window.location.search);
         window.location.href = params.get('redirect') || '/';
       } else {
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
         });
         if (error) throw error;
-        setMessage(`Account created! Check your email to confirm — we sent a link to ${email}.`);
+        // If email confirmation is OFF in Supabase settings, the user is signed in immediately.
+        if (data.session) {
+          window.location.href = '/';
+        } else {
+          setMessage(`Account created. Check your email to confirm — we sent a link to ${email}.`);
+        }
       }
     } catch (e: any) {
       setError(e.message || 'Something went wrong');
@@ -68,7 +66,6 @@ export default function LoginPage() {
             {mode === 'signup' ? 'Make your cookbook' : 'Sign in to cook'}
           </h1>
           <p className="text-sm text-ink-muted">
-            {mode === 'magic' && 'We\'ll email you a link — no password needed.'}
             {mode === 'signin' && 'Welcome back to your collection.'}
             {mode === 'signup' && 'Your private recipes, scaled and shared on your terms.'}
           </p>
@@ -91,23 +88,21 @@ export default function LoginPage() {
               </div>
             </label>
 
-            {mode !== 'magic' && (
-              <label className="block">
-                <span className="text-xs font-medium text-ink-soft block mb-1">Password</span>
-                <div className="relative">
-                  <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-tertiary" />
-                  <input
-                    type="password"
-                    required
-                    minLength={6}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder={mode === 'signup' ? 'Pick a password (6+ chars)' : 'Your password'}
-                    className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-ink/15 bg-cream-card focus:border-terracotta outline-none text-sm"
-                  />
-                </div>
-              </label>
-            )}
+            <label className="block">
+              <span className="text-xs font-medium text-ink-soft block mb-1">Password</span>
+              <div className="relative">
+                <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-tertiary" />
+                <input
+                  type="password"
+                  required
+                  minLength={6}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder={mode === 'signup' ? 'Pick a password (6+ chars)' : 'Your password'}
+                  className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-ink/15 bg-cream-card focus:border-terracotta outline-none text-sm"
+                />
+              </div>
+            </label>
 
             <button
               type="submit"
@@ -115,7 +110,6 @@ export default function LoginPage() {
               className="w-full py-2.5 rounded-lg bg-ink text-cream text-sm font-medium hover:bg-ink-soft disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {busy && <Loader2 size={14} className="animate-spin" />}
-              {mode === 'magic' && 'Send me a magic link'}
               {mode === 'signin' && 'Sign in'}
               {mode === 'signup' && 'Create account'}
             </button>
@@ -132,25 +126,11 @@ export default function LoginPage() {
             </div>
           )}
 
-          <div className="mt-5 pt-5 border-t border-ink/10 flex flex-col gap-2 text-center text-xs">
-            {mode === 'magic' && (
-              <>
-                <button onClick={() => setMode('signin')} className="text-ink-muted hover:text-terracotta">
-                  Use email & password instead
-                </button>
-                <span className="text-ink-tertiary">Don't have an account? <button onClick={() => setMode('signup')} className="text-terracotta hover:underline font-medium">Sign up</button></span>
-              </>
-            )}
-            {mode === 'signin' && (
-              <>
-                <button onClick={() => setMode('magic')} className="text-ink-muted hover:text-terracotta">
-                  Use a magic link instead
-                </button>
-                <span className="text-ink-tertiary">Don't have an account? <button onClick={() => setMode('signup')} className="text-terracotta hover:underline font-medium">Sign up</button></span>
-              </>
-            )}
-            {mode === 'signup' && (
-              <span className="text-ink-tertiary">Already have an account? <button onClick={() => setMode('signin')} className="text-terracotta hover:underline font-medium">Sign in</button></span>
+          <div className="mt-5 pt-5 border-t border-ink/10 text-center text-xs text-ink-tertiary">
+            {mode === 'signin' ? (
+              <>Don't have an account? <button onClick={() => setMode('signup')} className="text-terracotta hover:underline font-medium">Sign up</button></>
+            ) : (
+              <>Already have an account? <button onClick={() => setMode('signin')} className="text-terracotta hover:underline font-medium">Sign in</button></>
             )}
           </div>
         </div>
