@@ -111,7 +111,7 @@ async function getYouTubeResults(query: string) {
       provider: 'youtube',
       name: `${query}`,
       description: 'YouTube cooking music',
-      embedUrl: `https://www.youtube.com/embed/jfKfPfyJRdk?autoplay=0`, // Lofi Girl - Lofi Hip Hop Radio (very stable)
+      embedUrl: `https://www.youtube.com/embed/jfKfPfyJRdk?autoplay=1`, // Lofi Girl - Lofi Hip Hop Radio (very stable)
       externalUrl: `https://music.youtube.com/search?q=${encodeURIComponent(query)}`,
       note: 'Add YOUTUBE_API_KEY to env vars for proper search',
     }];
