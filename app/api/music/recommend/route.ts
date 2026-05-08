@@ -3,14 +3,56 @@ import { getValidAccessTokenForUser, requireUser } from '@/lib/spotify';
 
 export type MusicSource = 'spotify' | 'youtube' | 'soundcloud';
 
-const MOOD_MAP: Record<string, { query: string }> = {
-  upbeat: { query: 'feel good cooking' },
-  chill: { query: 'chill cooking' },
-  jazzy: { query: 'kitchen jazz' },
-  italian: { query: 'italian dinner' },
-  dinner_party: { query: 'dinner party' },
-  energetic: { query: 'high energy cooking' },
-  focused: { query: 'focus cooking instrumental' },
+const MOOD_QUERIES: Record<string, { search: string; soundcloud: string[] }> = {
+  upbeat: {
+    search: 'feel good cooking music playlist',
+    // All SoundCloud URLs verified to exist
+    soundcloud: [
+      'https://soundcloud.com/sound-playlist/sets/complete-2025-top-trending',
+      'https://soundcloud.com/sc-playlists/sets/lo-fi-chill-beats',
+    ],
+  },
+  chill: {
+    search: 'chill cooking lofi playlist',
+    soundcloud: [
+      'https://soundcloud.com/sc-playlists/sets/lo-fi-chill-beats',
+      'https://soundcloud.com/chillhopdotcom/sets/lofihiphop',
+    ],
+  },
+  jazzy: {
+    search: 'jazz cooking dinner playlist',
+    soundcloud: [
+      'https://soundcloud.com/relaxmusicrecords/sets/coffee-shop-jazz-caf-music',
+      'https://soundcloud.com/jazzhopcafe/sets/coffee-and-crates',
+    ],
+  },
+  italian: {
+    search: 'italian dinner music playlist',
+    soundcloud: [
+      'https://soundcloud.com/italianrestaurantmusicacademy/sets/o-sole-mio-italian-restaurant',
+      'https://soundcloud.com/profimedia/sets/ristorante-italiano-the',
+    ],
+  },
+  dinner_party: {
+    search: 'dinner party background music playlist',
+    soundcloud: [
+      'https://soundcloud.com/smoothjazz24h/sets/bar-of-jazz-mellow-music-for',
+      'https://soundcloud.com/relaxmusicrecords/sets/lounge-jazz-bar-cafe',
+    ],
+  },
+  energetic: {
+    search: 'high energy cooking music playlist',
+    soundcloud: [
+      'https://soundcloud.com/sound-playlist/sets/complete-2025-top-trending',
+    ],
+  },
+  focused: {
+    search: 'focus instrumental music playlist',
+    soundcloud: [
+      'https://soundcloud.com/chillhopdotcom/sets/lofihiphop',
+      'https://soundcloud.com/dabootlegboy/sets/study-chill-lofi-hiphop',
+    ],
+  },
 };
 
 function moodFromCuisine(cuisine: string | null | undefined): string {
@@ -23,6 +65,7 @@ function moodFromCuisine(cuisine: string | null | undefined): string {
   return 'chill';
 }
 
+// ===== Spotify =====
 async function getSpotifyClientCredsToken() {
   const auth = Buffer.from(
     `${process.env.SPOTIFY_CLIENT_ID}:${process.env.SPOTIFY_CLIENT_SECRET}`
@@ -58,95 +101,117 @@ async function getSpotifyPlaylists(query: string, userToken?: string) {
     }));
 }
 
-function getYouTubePlaylist(query: string) {
-  // YouTube doesn't require auth for embed search results
-  const ytQuery = encodeURIComponent(`${query} playlist`);
-  return [
-    {
+// ===== YouTube via Data API v3 =====
+async function getYouTubeResults(query: string) {
+  const apiKey = process.env.YOUTUBE_API_KEY;
+  if (!apiKey) {
+    // Without an API key, fall back to a public playlist iframe that's known-stable.
+    // YouTube no longer supports listType=search in embeds, so this is the only safe fallback.
+    return [{
       provider: 'youtube',
-      name: `${query} (YouTube)`,
-      description: 'Full songs via YouTube — has occasional ads',
-      embedUrl: `https://www.youtube.com/embed?listType=search&list=${ytQuery}`,
-      externalUrl: `https://music.youtube.com/search?q=${ytQuery}`,
-    },
-  ];
+      name: `${query}`,
+      description: 'YouTube cooking music',
+      embedUrl: `https://www.youtube.com/embed/jfKfPfyJRdk?autoplay=0`, // Lofi Girl - Lofi Hip Hop Radio (very stable)
+      externalUrl: `https://music.youtube.com/search?q=${encodeURIComponent(query)}`,
+      note: 'Add YOUTUBE_API_KEY to env vars for proper search',
+    }];
+  }
+
+  // Search for playlists first - they're better for sustained cooking music
+  const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query)}&type=playlist&maxResults=6&safeSearch=moderate&key=${apiKey}`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    const errText = await res.text();
+    console.error('YouTube API error:', res.status, errText);
+    throw new Error(`YouTube search failed: ${res.status}`);
+  }
+  const data = await res.json();
+
+  return (data.items || [])
+    .filter((it: any) => it?.id?.playlistId)
+    .map((it: any) => ({
+      provider: 'youtube',
+      id: it.id.playlistId,
+      name: it.snippet.title,
+      description: it.snippet.channelTitle,
+      image: it.snippet.thumbnails?.medium?.url || it.snippet.thumbnails?.default?.url,
+      embedUrl: `https://www.youtube.com/embed/videoseries?list=${it.id.playlistId}&autoplay=1`,
+      externalUrl: `https://www.youtube.com/playlist?list=${it.id.playlistId}`,
+    }));
 }
 
-async function getSoundCloudPlaylists(query: string) {
-  // SoundCloud has a public search via their website that works in embeds.
-  // We give them a search URL embedded in SoundCloud's player.
-  // Note: SoundCloud's HTML-embed search URL pattern.
-  const scQuery = encodeURIComponent(query);
-  // Using their public search results page URL inside the player widget
-  const searchUrl = `https://soundcloud.com/search/sounds?q=${scQuery}`;
-  const widgetUrl = `https://w.soundcloud.com/player/?url=${encodeURIComponent(searchUrl)}&color=%23B8543A&auto_play=false&hide_related=true&show_comments=false&show_user=true&show_reposts=false&show_teaser=false&visual=false`;
-  return [
-    {
-      provider: 'soundcloud',
-      name: `${query} (SoundCloud)`,
-      description: 'Full tracks, no account needed',
-      embedUrl: widgetUrl,
-      externalUrl: `https://soundcloud.com/search/sounds?q=${scQuery}`,
-    },
-  ];
+// ===== SoundCloud (curated) =====
+function getSoundCloudPlaylists(moodKey: string) {
+  const urls = MOOD_QUERIES[moodKey]?.soundcloud || MOOD_QUERIES.chill.soundcloud;
+  return urls.map((playlistUrl, i) => ({
+    provider: 'soundcloud',
+    id: `${moodKey}-${i}`,
+    name: `${capitalize(moodKey.replace('_', ' '))} on SoundCloud`,
+    description: 'Curated playlist',
+    embedUrl: `https://w.soundcloud.com/player/?url=${encodeURIComponent(playlistUrl)}&color=%23B8543A&auto_play=true&hide_related=true&show_comments=false&show_user=true&show_reposts=false&show_teaser=false&visual=false`,
+    externalUrl: playlistUrl,
+  }));
 }
 
+function capitalize(s: string) {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+// ===== Route handler =====
 export async function POST(req: NextRequest) {
   try {
     const { mood, recipeCuisine, source } = await req.json();
     const moodKey = mood || moodFromCuisine(recipeCuisine);
-    const config = MOOD_MAP[moodKey] || MOOD_MAP.chill;
+    const config = MOOD_QUERIES[moodKey] || MOOD_QUERIES.chill;
 
-    // Determine source: explicit > user preference > default
+    // Determine source: explicit > preference > YouTube
     let chosenSource: MusicSource = source;
     if (!chosenSource) {
       try {
         const user = await requireUser();
         const pref = user.user_metadata?.music_source as MusicSource | undefined;
-        chosenSource = pref || 'youtube'; // YouTube is the safest default — works for everyone
+        chosenSource = pref || 'youtube';
       } catch {
         chosenSource = 'youtube';
       }
     }
 
     if (chosenSource === 'spotify') {
-      // Try user's connected Spotify first (Premium = full playback)
+      // Try authed Spotify (Premium) first
       try {
         const user = await requireUser();
         const userToken = await getValidAccessTokenForUser(user.id);
         if (userToken) {
-          const playlists = await getSpotifyPlaylists(config.query, userToken.accessToken);
+          const playlists = await getSpotifyPlaylists(config.search, userToken.accessToken);
           if (playlists.length) {
             return NextResponse.json({
-              mood: moodKey,
-              source: 'spotify',
-              playlists,
-              authed: true,
+              mood: moodKey, source: 'spotify', playlists, authed: true,
               displayName: userToken.displayName,
             });
           }
         }
       } catch {}
-
-      // Fallback to client-credentials (preview only)
+      // Fall through to client-credentials Spotify (preview-only)
       try {
-        const playlists = await getSpotifyPlaylists(config.query);
+        const playlists = await getSpotifyPlaylists(config.search);
         if (playlists.length) {
           return NextResponse.json({ mood: moodKey, source: 'spotify', playlists, authed: false });
         }
       } catch {}
-
-      // Spotify totally failed — fall through to YouTube
     }
 
     if (chosenSource === 'soundcloud') {
-      const playlists = await getSoundCloudPlaylists(config.query);
+      const playlists = getSoundCloudPlaylists(moodKey);
       return NextResponse.json({ mood: moodKey, source: 'soundcloud', playlists, authed: false });
     }
 
-    // Default / fallback: YouTube
-    const playlists = getYouTubePlaylist(config.query);
-    return NextResponse.json({ mood: moodKey, source: 'youtube', playlists, authed: false });
+    // YouTube path (and fallback when Spotify path fails)
+    try {
+      const playlists = await getYouTubeResults(config.search);
+      return NextResponse.json({ mood: moodKey, source: 'youtube', playlists, authed: false });
+    } catch (e: any) {
+      return NextResponse.json({ error: e.message || 'YouTube search failed' }, { status: 500 });
+    }
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
